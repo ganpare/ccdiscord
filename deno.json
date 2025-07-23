@@ -1,0 +1,31 @@
+{
+  "tasks": {
+    "start": "deno run -A --env ccdiscord.ts",
+    "dev": "deno run --watch -A --env ccdiscord.ts",
+    "check": "deno check ccdiscord.ts",
+    "fmt": "deno fmt",
+    "lint": "deno lint"
+  },
+  "compilerOptions": {
+    "lib": ["deno.window"]
+  },
+  "fmt": {
+    "options": {
+      "useTabs": false,
+      "lineWidth": 100,
+      "indentWidth": 2,
+      "singleQuote": false,
+      "proseWrap": "preserve"
+    }
+  },
+  "lint": {
+    "rules": {
+      "tags": ["recommended"]
+    }
+  },
+  "imports": {
+    "@anthropic-ai/claude-code": "npm:@anthropic-ai/claude-code@^1.0.58",
+    "@david/dax": "jsr:@david/dax@^0.43.2",
+    "discord.js": "npm:discord.js@^14.21.0"
+  }
+}
