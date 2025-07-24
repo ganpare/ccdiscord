@@ -163,7 +163,7 @@ class TaskQueue {
 
 // ==================== グローバル変数 ====================
 const DEFAULT_OPTIONS: Options = {
-  maxTurns: 15,
+  maxTurns: 300,
   model: "claude-opus-4-20250514",
   permissionMode: "bypassPermissions",
 };
