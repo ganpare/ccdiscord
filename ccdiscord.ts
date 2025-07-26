@@ -425,53 +425,13 @@ async function checkAndExecuteNextTask() {
   if (!currentThread) return;
   
   try {
-    // TODO.md を探す
-    const todoPath = `${Deno.cwd()}/TODO.md`;
-    let todoContent = "";
+    // TODO.md にタスクがあるか確認するように指示
+    const taskMessage = await currentThread.send(`[自動実行] TODO.md を確認して、次のタスクを実行してください。`);
     
-    try {
-      todoContent = await Deno.readTextFile(todoPath);
-    } catch {
-      console.log(
-        formatLogMessage("情報", {
-          メッセージ: "TODO.md が見つかりませんでした",
-        })
-      );
-    }
-    
-    let nextTask = "";
-    
-    if (todoContent) {
-      // TODO.md から未完了のタスクを探す
-      const lines = todoContent.split("\n");
-      for (const line of lines) {
-        if (line.trim().startsWith("- [ ]")) {
-          nextTask = line.replace("- [ ]", "").trim();
-          break;
-        }
-      }
-    }
-    
-    if (nextTask) {
-      // 次のタスクを実行
-      await currentThread.send(`[自動実行] TODO.md から次のタスクを見つけました: **${nextTask}**\n\nこのタスクを実行します。`);
-      const taskMessage = await currentThread.send(`[自動実行] TODO.md を更新して、次のタスクを実行してください: ${nextTask}`);
-      
-      // Claude-code にタスクを送信
-      taskQueue.add(taskMessage);
-      if (!taskQueue.processing) {
-        processQueue();
-      }
-    } else {
-      // タスクがない場合
-      await currentThread.send(`[自動実行] TODO.md に未完了のタスクがありません。\n\n現在の作業をコミットして、次にやるべきことを考えます。`);
-      const taskMessage = await currentThread.send(`[自動実行] 今までの作業を適切にコミットして、次にやるべきことを提案してください。`);
-      
-      // Claude-code にタスクを送信
-      taskQueue.add(taskMessage);
-      if (!taskQueue.processing) {
-        processQueue();
-      }
+    // Claude-code にタスクを送信
+    taskQueue.add(taskMessage);
+    if (!taskQueue.processing) {
+      processQueue();
     }
   } catch (error) {
     console.error(
