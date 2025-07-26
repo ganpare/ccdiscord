@@ -115,7 +115,7 @@ async function getSessionList(): Promise<SessionInfo[]> {
         const firstLine = await Deno.readTextFile(filePath).then(
           (content) => content.split("\n")[0]
         );
-        
+
         try {
           const data = JSON.parse(firstLine);
           if (data.sessionId) {
@@ -123,24 +123,29 @@ async function getSessionList(): Promise<SessionInfo[]> {
               sessionId: data.sessionId,
               timestamp: data.timestamp || "N/A",
             };
-            
+
             // ファイル全体を読んで最後のユーザークエリを探す
             try {
               const allContent = await Deno.readTextFile(filePath);
               const lines = allContent.trim().split("\n");
-              
+
               // 逆順で最後のユーザーメッセージを探す
               for (let i = lines.length - 1; i >= 0; i--) {
                 try {
                   const lineData = JSON.parse(lines[i]);
                   if (lineData.type === "user" && lineData.message?.content) {
-                    const content = Array.isArray(lineData.message.content) 
-                      ? lineData.message.content.find((c: { type: string; text?: string }) => c.type === "text")?.text
+                    const content = Array.isArray(lineData.message.content)
+                      ? lineData.message.content.find(
+                          (c: { type: string; text?: string }) =>
+                            c.type === "text"
+                        )?.text
                       : lineData.message.content;
-                    
+
                     if (content) {
                       // 最初の50文字までを取得
-                      sessionInfo.lastQuery = content.slice(0, 50) + (content.length > 50 ? "..." : "");
+                      sessionInfo.lastQuery =
+                        content.slice(0, 50) +
+                        (content.length > 50 ? "..." : "");
                       break;
                     }
                   }
@@ -148,7 +153,7 @@ async function getSessionList(): Promise<SessionInfo[]> {
                   // JSONパースエラーは無視
                 }
               }
-              
+
               // タイトルを探す（最初のメッセージ）
               if (lines.length > 0) {
                 try {
@@ -163,7 +168,7 @@ async function getSessionList(): Promise<SessionInfo[]> {
             } catch {
               // ファイル読み込みエラーは無視
             }
-            
+
             entries.push(sessionInfo);
           }
         } catch {
@@ -189,7 +194,7 @@ async function getSessionList(): Promise<SessionInfo[]> {
 
 async function selectSessionWithDetails(): Promise<string | undefined> {
   const sessions = await getSessionList();
-  
+
   if (sessions.length === 0) {
     console.log("現在のプロジェクトにresume可能なセッションがありません");
     return undefined;
@@ -197,20 +202,23 @@ async function selectSessionWithDetails(): Promise<string | undefined> {
 
   // 最新5件まで表示
   const recentSessions = sessions.slice(0, 5);
-  
-  const options = recentSessions.map(session => {
-    const date = session.timestamp !== "N/A" 
-      ? new Date(session.timestamp).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })
-      : "N/A";
-    
+
+  const options = recentSessions.map((session) => {
+    const date =
+      session.timestamp !== "N/A"
+        ? new Date(session.timestamp).toLocaleString("ja-JP", {
+            timeZone: "Asia/Tokyo",
+          })
+        : "N/A";
+
     let label = `${session.sessionId.slice(0, 8)}... (${date})`;
-    
+
     if (session.title) {
       label += ` | ${session.title}`;
     } else if (session.lastQuery) {
       label += ` | ${session.lastQuery}`;
     }
-    
+
     return label;
   });
 
@@ -226,7 +234,7 @@ async function selectSessionWithDetails(): Promise<string | undefined> {
 async function showSessionList() {
   const sessions = await getSessionList();
   const currentDir = Deno.cwd().replace(/^\//, "").replace(/\//g, "-");
-  
+
   if (sessions.length === 0) {
     console.log("現在のプロジェクトにresume可能なセッションがありません");
     return;
@@ -234,7 +242,7 @@ async function showSessionList() {
 
   console.log(`Resume可能なセッション一覧 (プロジェクト: ${currentDir})`);
   console.log("==========================================");
-  
+
   for (const entry of sessions) {
     console.log(`${entry.sessionId}  ${entry.timestamp}`);
   }
@@ -247,11 +255,14 @@ interface ConversationMessage {
   timestamp?: string;
 }
 
-async function getConversationHistory(sessionId: string, limit = 10): Promise<ConversationMessage[]> {
+async function getConversationHistory(
+  sessionId: string,
+  limit = 10
+): Promise<ConversationMessage[]> {
   const projectDir = `${Deno.env.get("HOME")}/.claude/projects`;
   const currentDir = Deno.cwd().replace(/^\//, "").replace(/\//g, "-");
   const projectPath = `${projectDir}/-${currentDir}`;
-  
+
   try {
     // セッションIDを含むファイルを探す
     let targetFile: string | undefined;
@@ -261,41 +272,49 @@ async function getConversationHistory(sessionId: string, limit = 10): Promise<Co
         break;
       }
     }
-    
+
     if (!targetFile) {
       console.log("指定されたセッションの履歴が見つかりませんでした");
       return [];
     }
-    
+
     const content = await Deno.readTextFile(targetFile);
     const lines = content.trim().split("\n");
     const messages: ConversationMessage[] = [];
-    
+
     // メッセージをパース
     for (const line of lines) {
       try {
         const data = JSON.parse(line);
         if (data.type === "user" && data.message?.content) {
           const content = Array.isArray(data.message.content)
-            ? data.message.content.find((c: { type: string; text?: string }) => c.type === "text")?.text
+            ? data.message.content.find(
+                (c: { type: string; text?: string }) => c.type === "text"
+              )?.text
             : data.message.content;
-          
+
           if (content) {
             messages.push({
               type: "user",
-              content: content.slice(0, 100) + (content.length > 100 ? "..." : ""),
+              content:
+                content.slice(0, 100) + (content.length > 100 ? "..." : ""),
               timestamp: data.timestamp,
             });
           }
         } else if (data.type === "assistant" && data.message?.content) {
           const content = Array.isArray(data.message.content)
-            ? data.message.content.map((c: { type: string; text?: string }) => c.type === "text" ? c.text : "[ツール使用]").join(" ")
+            ? data.message.content
+                .map((c: { type: string; text?: string }) =>
+                  c.type === "text" ? c.text : "[ツール使用]"
+                )
+                .join(" ")
             : data.message.content;
-          
+
           if (content) {
             messages.push({
               type: "assistant",
-              content: content.slice(0, 100) + (content.length > 100 ? "..." : ""),
+              content:
+                content.slice(0, 100) + (content.length > 100 ? "..." : ""),
               timestamp: data.timestamp,
             });
           }
@@ -304,10 +323,9 @@ async function getConversationHistory(sessionId: string, limit = 10): Promise<Co
         // JSONパースエラーは無視
       }
     }
-    
+
     // 最新のメッセージを返す
     return messages.slice(-limit);
-    
   } catch (error) {
     console.error("会話履歴の読み込み中にエラーが発生しました:", error);
     return [];
@@ -317,44 +335,50 @@ async function getConversationHistory(sessionId: string, limit = 10): Promise<Co
 // 会話履歴を表示する関数
 async function showConversationHistory(sessionId: string, limit = 10) {
   const messages = await getConversationHistory(sessionId, limit);
-  
+
   if (messages.length === 0) {
     console.log("会話履歴がありません");
     return;
   }
-  
+
   console.log("\n直近の会話履歴:");
   console.log("==========================================");
-  
+
   for (const msg of messages) {
     const role = msg.type === "user" ? "👤 User" : "🤖 Claude";
-    const time = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString("ja-JP") : "";
+    const time = msg.timestamp
+      ? new Date(msg.timestamp).toLocaleTimeString("ja-JP")
+      : "";
     console.log(`\n[${time}] ${role}:`);
     console.log(msg.content);
   }
-  
+
   console.log("\n==========================================");
   console.log("会話を継続します...\n");
 }
 
 // 会話履歴をDiscordメッセージ形式にフォーマットする関数
-function formatConversationHistoryForDiscord(messages: ConversationMessage[]): string {
+function formatConversationHistoryForDiscord(
+  messages: ConversationMessage[]
+): string {
   if (messages.length === 0) {
     return "";
   }
-  
+
   let content = "## 📋 直近の会話履歴\n\n";
-  
+
   for (const msg of messages) {
     const role = msg.type === "user" ? "👤 **User**" : "🤖 **Claude**";
-    const time = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString("ja-JP") : "";
-    
+    const time = msg.timestamp
+      ? new Date(msg.timestamp).toLocaleTimeString("ja-JP")
+      : "";
+
     content += `${role} \`${time}\`\n`;
     content += `> ${msg.content.replace(/\n/g, "\n> ")}\n\n`;
   }
-  
+
   content += "---\n\n";
-  
+
   return content;
 }
 
@@ -376,10 +400,10 @@ function startActivityMonitor() {
   if (activityTimer) {
     clearInterval(activityTimer);
   }
-  
+
   // 開始時間を記録
   neverSleepStartTime = Date.now();
-  
+
   console.log(
     formatLogMessage("情報", {
       モード: "Never Sleep モードが有効です",
@@ -387,34 +411,42 @@ function startActivityMonitor() {
       最大実行時間: "6時間",
     })
   );
-  
+
   activityTimer = setInterval(async () => {
     // 最大実行時間チェック（6時間）
-    if (neverSleepStartTime && Date.now() - neverSleepStartTime > 6 * 60 * 60 * 1000) {
+    if (
+      neverSleepStartTime &&
+      Date.now() - neverSleepStartTime > 6 * 60 * 60 * 1000
+    ) {
       console.log(
         formatLogMessage("Never Sleep", {
-          メッセージ: "最大実行時間（6時間）に達しました。Never Sleepモードを終了します。",
+          メッセージ:
+            "最大実行時間（6時間）に達しました。Never Sleepモードを終了します。",
         })
       );
-      
+
       if (currentThread) {
-        await currentThread.send("⏰ **Never Sleepモードの最大実行時間（6時間）に達しました。**\n\n自動タスク実行を終了します。");
+        await currentThread.send(
+          "⏰ **Never Sleepモードの最大実行時間（6時間）に達しました。**\n\n自動タスク実行を終了します。"
+        );
       }
-      
+
       clearInterval(activityTimer);
       activityTimer = undefined;
       return;
     }
-    
+
     const timeSinceLastActivity = Date.now() - lastActivityTime;
-    
-    if (timeSinceLastActivity > 5 * 60 * 1000) { // 5分
+
+    if (timeSinceLastActivity > 5 * 60 * 1000) {
+      // 5分
       console.log(
         formatLogMessage("Never Sleep", {
-          メッセージ: "5分間アクティビティがありません。次のタスクを探します...",
+          メッセージ:
+            "5分間アクティビティがありません。次のタスクを探します...",
         })
       );
-      
+
       await checkAndExecuteNextTask();
       lastActivityTime = Date.now();
     }
@@ -423,11 +455,13 @@ function startActivityMonitor() {
 
 async function checkAndExecuteNextTask() {
   if (!currentThread) return;
-  
+
   try {
     // TODO.md にタスクがあるか確認するように指示
-    const taskMessage = await currentThread.send(`[自動実行] TODO.md を確認して、次のタスクを実行してください。`);
-    
+    const taskMessage = await currentThread.send(
+      `[自動実行] Check TODO.md to continue`
+    );
+
     // Claude-code にタスクを送信
     taskQueue.add(taskMessage);
     if (!taskQueue.processing) {
@@ -504,8 +538,10 @@ function formatEnvironmentInfo(info: EnvironmentInfo): string {
 **プラットフォーム**: ${info.platform}
 **Deno バージョン**: ${info.denoVersion}`;
 
-  const neverSleepInfo = neverSleep ? `
-**Never Sleep モード**: 有効（最大6時間）` : "";
+  const neverSleepInfo = neverSleep
+    ? `
+**Never Sleep モード**: 有効（最大6時間）`
+    : "";
 
   return `${sessionInfo}${neverSleepInfo}
 
@@ -717,10 +753,10 @@ async function askClaudeWithCallback(
   const maxRetries = retryOptions?.maxRetries || 10;
   const baseDelay = retryOptions?.baseDelay || 5000; // 5秒
   const maxDelay = retryOptions?.maxDelay || 29 * 60 * 1000; // 29分
-  
+
   let retryCount = 0;
   let lastError: Error | null = null;
-  
+
   while (retryCount <= maxRetries) {
     try {
       console.log(
@@ -730,107 +766,107 @@ async function askClaudeWithCallback(
         })
       );
 
-    // オプションを設定
-    const options: Options = {
-      ...DEFAULT_OPTIONS,
-      ...(isFirstQuery ? {} : { continue: true }),
-      ...(resumeId && isFirstQuery ? { resume: resumeId } : {}),
-    };
+      // オプションを設定
+      const options: Options = {
+        ...DEFAULT_OPTIONS,
+        ...(isFirstQuery ? {} : { continue: true }),
+        ...(resumeId && isFirstQuery ? { resume: resumeId } : {}),
+      };
 
-    const abortController = new AbortController();
-    if (abortSignal) {
-      abortSignal.addEventListener("abort", () => abortController.abort());
-    }
-
-    const response = query({
-      prompt: question,
-      options,
-      abortController,
-    });
-
-    // ストリーミングレスポンスを文字列に変換
-    let fullResponse = "";
-    let toolResults = "";
-    for await (const message of response) {
-      // 中断シグナルをチェック
-      if (abortSignal?.aborted) {
-        throw new Error("タスクが中断されました");
+      const abortController = new AbortController();
+      if (abortSignal) {
+        abortSignal.addEventListener("abort", () => abortController.abort());
       }
 
-      if (message.type === "assistant") {
-        // assistant メッセージからテキストを抽出
-        const content = message.message.content;
-        if (typeof content === "string") {
-          fullResponse += content;
-        } else if (Array.isArray(content)) {
-          for (const block of content) {
-            if (block.type === "text") {
-              fullResponse += block.text;
-            }
-          }
-        }
-      } else if (message.type === "system" && message.subtype === "init") {
-        // セッションIDを保存
-        currentSessionId = message.session_id;
-        console.log(
-          formatLogMessage("セッション開始", {
-            セッションID: currentSessionId,
-          })
-        );
-        // 初回クエリが完了
-        if (isFirstQuery) {
-          isFirstQuery = false;
-        }
-      } else if (message.type === "result") {
-        // 結果メッセージでセッションIDを更新
-        currentSessionId = message.session_id;
-      } else if (message.type === "user") {
-        // ユーザーメッセージ（tool_result など）を処理
-        const content = message.message.content;
-        if (Array.isArray(content)) {
-          for (const item of content) {
-            if (
-              item.type === "tool_result" &&
-              typeof item.content === "string"
-            ) {
-              // tool_result の内容を追加（長い場合は切り詰める）
-              const truncated =
-                item.content.length > 300
-                  ? item.content.substring(0, 300) + "..."
-                  : item.content;
-              toolResults += `\n\`\`\`\n${truncated}\n\`\`\`\n`;
+      const response = query({
+        prompt: question,
+        options,
+        abortController,
+      });
 
-              // 中間出力をコールバックに送信
-              if (onProgress) {
-                const progressContent = `📋 ツール実行結果:\n\`\`\`\n${truncated}\n\`\`\``;
-                await onProgress(progressContent);
+      // ストリーミングレスポンスを文字列に変換
+      let fullResponse = "";
+      let toolResults = "";
+      for await (const message of response) {
+        // 中断シグナルをチェック
+        if (abortSignal?.aborted) {
+          throw new Error("タスクが中断されました");
+        }
+
+        if (message.type === "assistant") {
+          // assistant メッセージからテキストを抽出
+          const content = message.message.content;
+          if (typeof content === "string") {
+            fullResponse += content;
+          } else if (Array.isArray(content)) {
+            for (const block of content) {
+              if (block.type === "text") {
+                fullResponse += block.text;
               }
             }
           }
+        } else if (message.type === "system" && message.subtype === "init") {
+          // セッションIDを保存
+          currentSessionId = message.session_id;
+          console.log(
+            formatLogMessage("セッション開始", {
+              セッションID: currentSessionId,
+            })
+          );
+          // 初回クエリが完了
+          if (isFirstQuery) {
+            isFirstQuery = false;
+          }
+        } else if (message.type === "result") {
+          // 結果メッセージでセッションIDを更新
+          currentSessionId = message.session_id;
+        } else if (message.type === "user") {
+          // ユーザーメッセージ（tool_result など）を処理
+          const content = message.message.content;
+          if (Array.isArray(content)) {
+            for (const item of content) {
+              if (
+                item.type === "tool_result" &&
+                typeof item.content === "string"
+              ) {
+                // tool_result の内容を追加（長い場合は切り詰める）
+                const truncated =
+                  item.content.length > 300
+                    ? item.content.substring(0, 300) + "..."
+                    : item.content;
+                toolResults += `\n\`\`\`\n${truncated}\n\`\`\`\n`;
+
+                // 中間出力をコールバックに送信
+                if (onProgress) {
+                  const progressContent = `📋 ツール実行結果:\n\`\`\`\n${truncated}\n\`\`\``;
+                  await onProgress(progressContent);
+                }
+              }
+            }
+          }
+        } else {
+          // 想定外のメッセージタイプをログ出力（最初の300文字まで）
+          const messageStr = JSON.stringify(message);
+          const truncated =
+            messageStr.length > 300
+              ? messageStr.substring(0, 300) + "..."
+              : messageStr;
+          console.log(
+            formatLogMessage("その他のメッセージタイプ", {
+              タイプ: (message as { type?: string }).type || "unknown",
+              内容: truncated,
+            })
+          );
         }
-      } else {
-        // 想定外のメッセージタイプをログ出力（最初の300文字まで）
-        const messageStr = JSON.stringify(message);
-        const truncated =
-          messageStr.length > 300
-            ? messageStr.substring(0, 300) + "..."
-            : messageStr;
-        console.log(
-          formatLogMessage("その他のメッセージタイプ", {
-            タイプ: (message as { type?: string }).type || "unknown",
-            内容: truncated,
-          })
-        );
       }
-    }
 
-    // コードブロックがある場合は Discord のフォーマットに変換
-    fullResponse = fullResponse.replace(/```(\w+)?\n/g, "```$1\n");
+      // コードブロックがある場合は Discord のフォーマットに変換
+      fullResponse = fullResponse.replace(/```(\w+)?\n/g, "```$1\n");
 
-    // toolResults がある場合は、fullResponse に追加
-    if (toolResults) {
-      fullResponse = toolResults + (fullResponse ? "\n" + fullResponse : "");
-    }
+      // toolResults がある場合は、fullResponse に追加
+      if (toolResults) {
+        fullResponse = toolResults + (fullResponse ? "\n" + fullResponse : "");
+      }
 
       return (
         fullResponse ||
@@ -839,37 +875,41 @@ async function askClaudeWithCallback(
     } catch (error) {
       lastError = error as Error;
       console.error("Claude への問い合わせエラー:", error);
-      
+
       // 中断シグナルの場合はリトライしない
       if (abortSignal?.aborted) {
         throw error;
       }
-      
+
       if (retryCount < maxRetries) {
         // Exponential backoff with jitter
         const delay = Math.min(
           baseDelay * Math.pow(2, retryCount) + Math.random() * 1000,
           maxDelay
         );
-        
+
         console.log(
           formatLogMessage("リトライ待機", {
             次回リトライ: `${Math.ceil(delay / 1000)}秒後`,
             リトライ回数: `${retryCount + 1}/${maxRetries}`,
           })
         );
-        
+
         // 遅延
-        await new Promise(resolve => setTimeout(resolve, delay));
+        await new Promise((resolve) => setTimeout(resolve, delay));
         retryCount++;
         continue;
       }
     }
   }
-  
+
   // 最大リトライ回数に達した場合
-  return formatMessage(MessageType.ERROR, 
-    `最大リトライ回数(${maxRetries})に達しました: ${lastError?.message || "不明なエラー"}`);
+  return formatMessage(
+    MessageType.ERROR,
+    `最大リトライ回数(${maxRetries})に達しました: ${
+      lastError?.message || "不明なエラー"
+    }`
+  );
 }
 
 // ==================== メッセージ送信 ====================
@@ -950,41 +990,19 @@ async function processQueue(): Promise<void> {
         console.error("考え中メッセージの送信エラー:", error);
       }
 
-      // 中間出力用のメッセージ
-      let progressMessage: Message | undefined;
-
       // Claude に問い合わせ（応答処理をカスタマイズ）
       const response = await askClaudeWithCallback(
         message.content,
         abortController.signal,
         async (content: string) => {
-          // 中間出力を表示
+          // 中間出力を新しいメッセージとして表示
           try {
-            if (progressMessage) {
-              // 既存のメッセージを編集
-              await progressMessage.edit(content).catch(async () => {
-                // 編集できない場合は新しいメッセージを送信
-                const newMessage = await textChannel.send(content);
-                progressMessage = newMessage;
-              });
-            } else {
-              // 初回は新しいメッセージを送信
-              progressMessage = await textChannel.send(content);
-            }
+            await textChannel.send(content);
           } catch (error) {
             console.error("中間出力の送信エラー:", error);
           }
         }
       );
-
-      // 中間出力メッセージを削除
-      if (progressMessage) {
-        try {
-          await progressMessage.delete();
-        } catch (error) {
-          console.error("中間出力メッセージの削除エラー:", error);
-        }
-      }
 
       // "考え中..." メッセージを削除
       if (thinkingMessage) {
@@ -1001,7 +1019,7 @@ async function processQueue(): Promise<void> {
       } catch (error) {
         console.error("応答メッセージの送信エラー:", error);
       }
-      
+
       // アクティビティ時間を更新
       lastActivityTime = Date.now();
 
@@ -1067,16 +1085,18 @@ client.once("ready", async () => {
       let conversationHistory = "";
       if (shouldContinue || resumeId) {
         const sessions = await getSessionList();
-        const targetSessionId = resumeId || (sessions.length > 0 ? sessions[0].sessionId : null);
-        
+        const targetSessionId =
+          resumeId || (sessions.length > 0 ? sessions[0].sessionId : null);
+
         if (targetSessionId) {
           const messages = await getConversationHistory(targetSessionId, 5);
           conversationHistory = formatConversationHistoryForDiscord(messages);
         }
       }
-      
+
       // 環境情報と会話履歴を投稿
-      const initialMessage = conversationHistory + formatEnvironmentInfo(envInfo);
+      const initialMessage =
+        conversationHistory + formatEnvironmentInfo(envInfo);
       await thread.send(initialMessage);
 
       console.log(
@@ -1085,18 +1105,18 @@ client.once("ready", async () => {
           スレッドID: thread.id,
         })
       );
-      
+
       // --never-sleep モードの場合、アクティビティ監視を開始
       if (neverSleep) {
         startActivityMonitor();
-        
+
         // 起動時に即座にタスクをチェック
         console.log(
           formatLogMessage("Never Sleep", {
             メッセージ: "起動時のタスクチェックを実行します",
           })
         );
-        
+
         // 少し遅延させてスレッドの準備を待つ
         setTimeout(async () => {
           await checkAndExecuteNextTask();
@@ -1124,7 +1144,7 @@ client.on("messageCreate", async (message: Message) => {
         内容: message.content,
       })
     );
-    
+
     // アクティビティ時間を更新
     lastActivityTime = Date.now();
 
@@ -1151,22 +1171,28 @@ client.on("messageCreate", async (message: Message) => {
       taskQueue.abort();
       taskQueue.clear();
       taskQueue.setProcessing(false);
-      
+
       // !stop を取り除いたメッセージを作成
       const cleanedContent = message.content.replace(/!stop/g, "").trim();
-      
+
       if (cleanedContent) {
         // クリーンなメッセージを新しいタスクとして送信
-        await textChannel.send("⛔ 実行中のタスクを停止しました。\n\n次のメッセージを新しいタスクとして処理します:");
-        
+        await textChannel.send(
+          "⛔ 実行中のタスクを停止しました。\n\n次のメッセージを新しいタスクとして処理します:"
+        );
+
         // 新しいメッセージオブジェクトを作成
-        const newMessage = Object.assign(Object.create(Object.getPrototypeOf(message)), message, {
-          content: cleanedContent
-        });
-        
+        const newMessage = Object.assign(
+          Object.create(Object.getPrototypeOf(message)),
+          message,
+          {
+            content: cleanedContent,
+          }
+        );
+
         // タスクをキューに追加
         taskQueue.add(newMessage);
-        
+
         // 現在処理中でなければ、キューの処理を開始
         if (!taskQueue.processing) {
           processQueue();
@@ -1183,7 +1209,9 @@ client.on("messageCreate", async (message: Message) => {
       // リセット時は resume ID もクリア
       if (resumeId) {
         console.log(
-          formatLogMessage("情報", { メッセージ: "resume ID がクリアされました" })
+          formatLogMessage("情報", {
+            メッセージ: "resume ID がクリアされました",
+          })
         );
       }
       currentSessionId = undefined;
