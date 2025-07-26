@@ -33,6 +33,10 @@ const { values } = parseArgs({
       short: "s",
       default: false,
     },
+    "never-sleep": {
+      type: "boolean",
+      default: false,
+    },
   },
 });
 
@@ -40,6 +44,7 @@ const shouldContinue = values.continue as boolean;
 let resumeId = values.resume as string | undefined;
 const listSessions = values["list-sessions"] as boolean;
 const selectSession = values.select as boolean;
+const neverSleep = values["never-sleep"] as boolean;
 
 // --continue と --resume は両立しない
 if (shouldContinue && resumeId) {
@@ -366,6 +371,117 @@ interface EnvironmentInfo {
   timestamp: string;
 }
 
+// ==================== Never Sleep 機能 ====================
+function startActivityMonitor() {
+  if (activityTimer) {
+    clearInterval(activityTimer);
+  }
+  
+  // 開始時間を記録
+  neverSleepStartTime = Date.now();
+  
+  console.log(
+    formatLogMessage("情報", {
+      モード: "Never Sleep モードが有効です",
+      タイムアウト: "5分",
+      最大実行時間: "6時間",
+    })
+  );
+  
+  activityTimer = setInterval(async () => {
+    // 最大実行時間チェック（6時間）
+    if (neverSleepStartTime && Date.now() - neverSleepStartTime > 6 * 60 * 60 * 1000) {
+      console.log(
+        formatLogMessage("Never Sleep", {
+          メッセージ: "最大実行時間（6時間）に達しました。Never Sleepモードを終了します。",
+        })
+      );
+      
+      if (currentThread) {
+        await currentThread.send("⏰ **Never Sleepモードの最大実行時間（6時間）に達しました。**\n\n自動タスク実行を終了します。");
+      }
+      
+      clearInterval(activityTimer);
+      activityTimer = undefined;
+      return;
+    }
+    
+    const timeSinceLastActivity = Date.now() - lastActivityTime;
+    
+    if (timeSinceLastActivity > 5 * 60 * 1000) { // 5分
+      console.log(
+        formatLogMessage("Never Sleep", {
+          メッセージ: "5分間アクティビティがありません。次のタスクを探します...",
+        })
+      );
+      
+      await checkAndExecuteNextTask();
+      lastActivityTime = Date.now();
+    }
+  }, 30 * 1000); // 30秒ごとにチェック
+}
+
+async function checkAndExecuteNextTask() {
+  if (!currentThread) return;
+  
+  try {
+    // TODO.md を探す
+    const todoPath = `${Deno.cwd()}/TODO.md`;
+    let todoContent = "";
+    
+    try {
+      todoContent = await Deno.readTextFile(todoPath);
+    } catch {
+      console.log(
+        formatLogMessage("情報", {
+          メッセージ: "TODO.md が見つかりませんでした",
+        })
+      );
+    }
+    
+    let nextTask = "";
+    
+    if (todoContent) {
+      // TODO.md から未完了のタスクを探す
+      const lines = todoContent.split("\n");
+      for (const line of lines) {
+        if (line.trim().startsWith("- [ ]")) {
+          nextTask = line.replace("- [ ]", "").trim();
+          break;
+        }
+      }
+    }
+    
+    if (nextTask) {
+      // 次のタスクを実行
+      await currentThread.send(`[自動実行] TODO.md から次のタスクを見つけました: **${nextTask}**\n\nこのタスクを実行します。`);
+      const taskMessage = await currentThread.send(`[自動実行] TODO.md を更新して、次のタスクを実行してください: ${nextTask}`);
+      
+      // Claude-code にタスクを送信
+      taskQueue.add(taskMessage);
+      if (!taskQueue.processing) {
+        processQueue();
+      }
+    } else {
+      // タスクがない場合
+      await currentThread.send(`[自動実行] TODO.md に未完了のタスクがありません。\n\n現在の作業をコミットして、次にやるべきことを考えます。`);
+      const taskMessage = await currentThread.send(`[自動実行] 今までの作業を適切にコミットして、次にやるべきことを提案してください。`);
+      
+      // Claude-code にタスクを送信
+      taskQueue.add(taskMessage);
+      if (!taskQueue.processing) {
+        processQueue();
+      }
+    }
+  } catch (error) {
+    console.error(
+      formatLogMessage("Never Sleep エラー", {
+        エラー: error instanceof Error ? error.message : String(error),
+      })
+    );
+  }
+}
+
 // ==================== メッセージフォーマット ====================
 const MessageType = {
   THINKING: "thinking",
@@ -421,12 +537,17 @@ function getEnvironmentInfo(): EnvironmentInfo {
 }
 
 function formatEnvironmentInfo(info: EnvironmentInfo): string {
-  return `## セッション情報
+  const sessionInfo = `## セッション情報
 
 **開始時刻**: ${info.timestamp}
 **作業ディレクトリ**: \`${info.workingDirectory}\`
 **プラットフォーム**: ${info.platform}
-**Deno バージョン**: ${info.denoVersion}
+**Deno バージョン**: ${info.denoVersion}`;
+
+  const neverSleepInfo = neverSleep ? `
+**Never Sleep モード**: 有効（最大6時間）` : "";
+
+  return `${sessionInfo}${neverSleepInfo}
 
 ---
 
@@ -498,6 +619,9 @@ let currentSessionId: string | undefined;
 let isFirstQuery = !shouldContinue && !resumeId;
 let currentThread: ThreadChannel | null = null;
 const taskQueue = new TaskQueue();
+let lastActivityTime = Date.now();
+let activityTimer: number | undefined;
+let neverSleepStartTime: number | undefined;
 
 // ==================== コマンド実行 ====================
 // 危険なコマンドのリスト
@@ -618,17 +742,33 @@ async function executeCommand(command: string): Promise<string> {
 }
 
 // ==================== Claude API ====================
+interface RetryOptions {
+  maxRetries?: number;
+  baseDelay?: number;
+  maxDelay?: number;
+}
+
 async function askClaudeWithCallback(
   question: string,
   abortSignal?: AbortSignal,
-  onProgress?: (content: string) => Promise<void>
+  onProgress?: (content: string) => Promise<void>,
+  retryOptions?: RetryOptions
 ): Promise<string> {
-  try {
-    console.log(
-      formatLogMessage("Claude 問い合わせ", {
-        質問: question,
-      })
-    );
+  const maxRetries = retryOptions?.maxRetries || 10;
+  const baseDelay = retryOptions?.baseDelay || 5000; // 5秒
+  const maxDelay = retryOptions?.maxDelay || 29 * 60 * 1000; // 29分
+  
+  let retryCount = 0;
+  let lastError: Error | null = null;
+  
+  while (retryCount <= maxRetries) {
+    try {
+      console.log(
+        formatLogMessage("Claude 問い合わせ", {
+          質問: question,
+          リトライ回数: retryCount > 0 ? retryCount : "初回",
+        })
+      );
 
     // オプションを設定
     const options: Options = {
@@ -732,14 +872,44 @@ async function askClaudeWithCallback(
       fullResponse = toolResults + (fullResponse ? "\n" + fullResponse : "");
     }
 
-    return (
-      fullResponse ||
-      formatMessage(MessageType.INFO, "応答がありませんでした。")
-    );
-  } catch (error) {
-    console.error("Claude への問い合わせエラー:", error);
-    return formatMessage(MessageType.ERROR, (error as Error).message);
+      return (
+        fullResponse ||
+        formatMessage(MessageType.INFO, "応答がありませんでした。")
+      );
+    } catch (error) {
+      lastError = error as Error;
+      console.error("Claude への問い合わせエラー:", error);
+      
+      // 中断シグナルの場合はリトライしない
+      if (abortSignal?.aborted) {
+        throw error;
+      }
+      
+      if (retryCount < maxRetries) {
+        // Exponential backoff with jitter
+        const delay = Math.min(
+          baseDelay * Math.pow(2, retryCount) + Math.random() * 1000,
+          maxDelay
+        );
+        
+        console.log(
+          formatLogMessage("リトライ待機", {
+            次回リトライ: `${Math.ceil(delay / 1000)}秒後`,
+            リトライ回数: `${retryCount + 1}/${maxRetries}`,
+          })
+        );
+        
+        // 遅延
+        await new Promise(resolve => setTimeout(resolve, delay));
+        retryCount++;
+        continue;
+      }
+    }
   }
+  
+  // 最大リトライ回数に達した場合
+  return formatMessage(MessageType.ERROR, 
+    `最大リトライ回数(${maxRetries})に達しました: ${lastError?.message || "不明なエラー"}`);
 }
 
 // ==================== メッセージ送信 ====================
@@ -871,6 +1041,9 @@ async function processQueue(): Promise<void> {
       } catch (error) {
         console.error("応答メッセージの送信エラー:", error);
       }
+      
+      // アクティビティ時間を更新
+      lastActivityTime = Date.now();
 
       // 完了メッセージを送信
       try {
@@ -952,6 +1125,24 @@ client.once("ready", async () => {
           スレッドID: thread.id,
         })
       );
+      
+      // --never-sleep モードの場合、アクティビティ監視を開始
+      if (neverSleep) {
+        startActivityMonitor();
+        
+        // 起動時に即座にタスクをチェック
+        console.log(
+          formatLogMessage("Never Sleep", {
+            メッセージ: "起動時のタスクチェックを実行します",
+          })
+        );
+        
+        // 少し遅延させてスレッドの準備を待つ
+        setTimeout(async () => {
+          await checkAndExecuteNextTask();
+          lastActivityTime = Date.now();
+        }, 1000);
+      }
     }
   } catch (error) {
     console.error("スレッド作成エラー:", error);
@@ -973,6 +1164,9 @@ client.on("messageCreate", async (message: Message) => {
         内容: message.content,
       })
     );
+    
+    // アクティビティ時間を更新
+    lastActivityTime = Date.now();
 
     const channel = message.channel;
     if (!channel || !channel.isTextBased()) {
@@ -997,7 +1191,29 @@ client.on("messageCreate", async (message: Message) => {
       taskQueue.abort();
       taskQueue.clear();
       taskQueue.setProcessing(false);
-      await textChannel.send("⛔ 実行中のタスクを停止しました。");
+      
+      // !stop を取り除いたメッセージを作成
+      const cleanedContent = message.content.replace(/!stop/g, "").trim();
+      
+      if (cleanedContent) {
+        // クリーンなメッセージを新しいタスクとして送信
+        await textChannel.send("⛔ 実行中のタスクを停止しました。\n\n次のメッセージを新しいタスクとして処理します:");
+        
+        // 新しいメッセージオブジェクトを作成
+        const newMessage = Object.assign(Object.create(Object.getPrototypeOf(message)), message, {
+          content: cleanedContent
+        });
+        
+        // タスクをキューに追加
+        taskQueue.add(newMessage);
+        
+        // 現在処理中でなければ、キューの処理を開始
+        if (!taskQueue.processing) {
+          processQueue();
+        }
+      } else {
+        await textChannel.send("⛔ 実行中のタスクを停止しました。");
+      }
       return;
     }
 
