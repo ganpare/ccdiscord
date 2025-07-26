@@ -9,6 +9,43 @@ import {
 } from "npm:discord.js@14.14.1";
 import { type Options, query } from "@anthropic-ai/claude-code";
 import { $ } from "@david/dax";
+import { parseArgs } from "node:util";
+
+// ==================== CLIパーサー ====================
+const { values } = parseArgs({
+  args: Deno.args,
+  options: {
+    continue: {
+      type: "boolean",
+      short: "c",
+      default: false,
+    },
+    resume: {
+      type: "string",
+      short: "r",
+    },
+    "list-sessions": {
+      type: "boolean",
+      default: false,
+    },
+    select: {
+      type: "boolean",
+      short: "s",
+      default: false,
+    },
+  },
+});
+
+const shouldContinue = values.continue as boolean;
+let resumeId = values.resume as string | undefined;
+const listSessions = values["list-sessions"] as boolean;
+const selectSession = values.select as boolean;
+
+// --continue と --resume は両立しない
+if (shouldContinue && resumeId) {
+  console.error("エラー: --continue と --resume は同時に使用できません");
+  Deno.exit(1);
+}
 
 // ==================== 設定 ====================
 const config = {
@@ -19,12 +56,301 @@ const config = {
     Deno.env.get("CC_CLAUDE_API_KEY") || Deno.env.get("CC_ANTHROPIC_API_KEY"),
 };
 
+// --select オプションの処理
+if (selectSession) {
+  resumeId = await selectSessionWithDetails();
+  if (!resumeId) {
+    console.log("セッションが選択されませんでした");
+    Deno.exit(0);
+  }
+  // 選択したセッションの会話履歴を表示
+  await showConversationHistory(resumeId);
+}
+
+// --list-sessions オプションの処理
+if (listSessions) {
+  await showSessionList();
+  Deno.exit(0);
+}
+
 // 設定の検証
 if (!config.discordToken || !config.channelId || !config.userId) {
   console.error(
     "CC_DISCORD_TOKEN, CC_DISCORD_CHANNEL_ID, CC_DISCORD_USER_ID を .env ファイルに設定してください"
   );
   Deno.exit(1);
+}
+
+// -c オプション時に最新セッションの会話履歴を表示（コンソールのみ）
+if (shouldContinue) {
+  const sessions = await getSessionList();
+  if (sessions.length > 0) {
+    await showConversationHistory(sessions[0].sessionId, 5);
+  }
+}
+
+// ==================== セッション関連関数 ====================
+interface SessionInfo {
+  sessionId: string;
+  timestamp: string;
+  lastQuery?: string;
+  title?: string;
+}
+
+async function getSessionList(): Promise<SessionInfo[]> {
+  const projectDir = `${Deno.env.get("HOME")}/.claude/projects`;
+  const currentDir = Deno.cwd().replace(/^\//, "").replace(/\//g, "-");
+  const projectPath = `${projectDir}/-${currentDir}`;
+
+  const entries = [];
+  try {
+    for await (const dirEntry of Deno.readDir(projectPath)) {
+      if (dirEntry.isFile && dirEntry.name.endsWith(".jsonl")) {
+        const filePath = `${projectPath}/${dirEntry.name}`;
+        const firstLine = await Deno.readTextFile(filePath).then(
+          (content) => content.split("\n")[0]
+        );
+        
+        try {
+          const data = JSON.parse(firstLine);
+          if (data.sessionId) {
+            const sessionInfo: SessionInfo = {
+              sessionId: data.sessionId,
+              timestamp: data.timestamp || "N/A",
+            };
+            
+            // ファイル全体を読んで最後のユーザークエリを探す
+            try {
+              const allContent = await Deno.readTextFile(filePath);
+              const lines = allContent.trim().split("\n");
+              
+              // 逆順で最後のユーザーメッセージを探す
+              for (let i = lines.length - 1; i >= 0; i--) {
+                try {
+                  const lineData = JSON.parse(lines[i]);
+                  if (lineData.type === "user" && lineData.message?.content) {
+                    const content = Array.isArray(lineData.message.content) 
+                      ? lineData.message.content.find((c: { type: string; text?: string }) => c.type === "text")?.text
+                      : lineData.message.content;
+                    
+                    if (content) {
+                      // 最初の50文字までを取得
+                      sessionInfo.lastQuery = content.slice(0, 50) + (content.length > 50 ? "..." : "");
+                      break;
+                    }
+                  }
+                } catch {
+                  // JSONパースエラーは無視
+                }
+              }
+              
+              // タイトルを探す（最初のメッセージ）
+              if (lines.length > 0) {
+                try {
+                  const firstData = JSON.parse(lines[0]);
+                  if (firstData.title) {
+                    sessionInfo.title = firstData.title;
+                  }
+                } catch {
+                  // JSONパースエラーは無視
+                }
+              }
+            } catch {
+              // ファイル読み込みエラーは無視
+            }
+            
+            entries.push(sessionInfo);
+          }
+        } catch {
+          // JSONパースエラーは無視
+        }
+      }
+    }
+  } catch (error) {
+    if (error instanceof Deno.errors.NotFound) {
+      // プロジェクトディレクトリがない場合
+    }
+  }
+
+  // タイムスタンプでソート（新しい順）
+  entries.sort((a, b) => {
+    if (a.timestamp === "N/A") return 1;
+    if (b.timestamp === "N/A") return -1;
+    return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+  });
+
+  return entries;
+}
+
+async function selectSessionWithDetails(): Promise<string | undefined> {
+  const sessions = await getSessionList();
+  
+  if (sessions.length === 0) {
+    console.log("現在のプロジェクトにresume可能なセッションがありません");
+    return undefined;
+  }
+
+  // 最新5件まで表示
+  const recentSessions = sessions.slice(0, 5);
+  
+  const options = recentSessions.map(session => {
+    const date = session.timestamp !== "N/A" 
+      ? new Date(session.timestamp).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })
+      : "N/A";
+    
+    let label = `${session.sessionId.slice(0, 8)}... (${date})`;
+    
+    if (session.title) {
+      label += ` | ${session.title}`;
+    } else if (session.lastQuery) {
+      label += ` | ${session.lastQuery}`;
+    }
+    
+    return label;
+  });
+
+  console.log("最近5件のセッション:");
+  const selectedIndex = await $.select({
+    message: "resumeするセッションを選択してください:",
+    options,
+  });
+
+  return recentSessions[selectedIndex as number].sessionId;
+}
+
+async function showSessionList() {
+  const sessions = await getSessionList();
+  const currentDir = Deno.cwd().replace(/^\//, "").replace(/\//g, "-");
+  
+  if (sessions.length === 0) {
+    console.log("現在のプロジェクトにresume可能なセッションがありません");
+    return;
+  }
+
+  console.log(`Resume可能なセッション一覧 (プロジェクト: ${currentDir})`);
+  console.log("==========================================");
+  
+  for (const entry of sessions) {
+    console.log(`${entry.sessionId}  ${entry.timestamp}`);
+  }
+}
+
+// 会話履歴を取得する関数
+interface ConversationMessage {
+  type: "user" | "assistant";
+  content: string;
+  timestamp?: string;
+}
+
+async function getConversationHistory(sessionId: string, limit = 10): Promise<ConversationMessage[]> {
+  const projectDir = `${Deno.env.get("HOME")}/.claude/projects`;
+  const currentDir = Deno.cwd().replace(/^\//, "").replace(/\//g, "-");
+  const projectPath = `${projectDir}/-${currentDir}`;
+  
+  try {
+    // セッションIDを含むファイルを探す
+    let targetFile: string | undefined;
+    for await (const dirEntry of Deno.readDir(projectPath)) {
+      if (dirEntry.isFile && dirEntry.name.includes(sessionId)) {
+        targetFile = `${projectPath}/${dirEntry.name}`;
+        break;
+      }
+    }
+    
+    if (!targetFile) {
+      console.log("指定されたセッションの履歴が見つかりませんでした");
+      return [];
+    }
+    
+    const content = await Deno.readTextFile(targetFile);
+    const lines = content.trim().split("\n");
+    const messages: ConversationMessage[] = [];
+    
+    // メッセージをパース
+    for (const line of lines) {
+      try {
+        const data = JSON.parse(line);
+        if (data.type === "user" && data.message?.content) {
+          const content = Array.isArray(data.message.content)
+            ? data.message.content.find((c: { type: string; text?: string }) => c.type === "text")?.text
+            : data.message.content;
+          
+          if (content) {
+            messages.push({
+              type: "user",
+              content: content.slice(0, 100) + (content.length > 100 ? "..." : ""),
+              timestamp: data.timestamp,
+            });
+          }
+        } else if (data.type === "assistant" && data.message?.content) {
+          const content = Array.isArray(data.message.content)
+            ? data.message.content.map((c: { type: string; text?: string }) => c.type === "text" ? c.text : "[ツール使用]").join(" ")
+            : data.message.content;
+          
+          if (content) {
+            messages.push({
+              type: "assistant",
+              content: content.slice(0, 100) + (content.length > 100 ? "..." : ""),
+              timestamp: data.timestamp,
+            });
+          }
+        }
+      } catch {
+        // JSONパースエラーは無視
+      }
+    }
+    
+    // 最新のメッセージを返す
+    return messages.slice(-limit);
+    
+  } catch (error) {
+    console.error("会話履歴の読み込み中にエラーが発生しました:", error);
+    return [];
+  }
+}
+
+// 会話履歴を表示する関数
+async function showConversationHistory(sessionId: string, limit = 10) {
+  const messages = await getConversationHistory(sessionId, limit);
+  
+  if (messages.length === 0) {
+    console.log("会話履歴がありません");
+    return;
+  }
+  
+  console.log("\n直近の会話履歴:");
+  console.log("==========================================");
+  
+  for (const msg of messages) {
+    const role = msg.type === "user" ? "👤 User" : "🤖 Claude";
+    const time = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString("ja-JP") : "";
+    console.log(`\n[${time}] ${role}:`);
+    console.log(msg.content);
+  }
+  
+  console.log("\n==========================================");
+  console.log("会話を継続します...\n");
+}
+
+// 会話履歴をDiscordメッセージ形式にフォーマットする関数
+function formatConversationHistoryForDiscord(messages: ConversationMessage[]): string {
+  if (messages.length === 0) {
+    return "";
+  }
+  
+  let content = "## 📋 直近の会話履歴\n\n";
+  
+  for (const msg of messages) {
+    const role = msg.type === "user" ? "👤 **User**" : "🤖 **Claude**";
+    const time = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString("ja-JP") : "";
+    
+    content += `${role} \`${time}\`\n`;
+    content += `> ${msg.content.replace(/\n/g, "\n> ")}\n\n`;
+  }
+  
+  content += "---\n\n";
+  
+  return content;
 }
 
 // ==================== タイプ定義 ====================
@@ -169,7 +495,7 @@ const DEFAULT_OPTIONS: Options = {
 };
 
 let currentSessionId: string | undefined;
-let isFirstQuery = true;
+let isFirstQuery = !shouldContinue && !resumeId;
 let currentThread: ThreadChannel | null = null;
 const taskQueue = new TaskQueue();
 
@@ -304,10 +630,11 @@ async function askClaudeWithCallback(
       })
     );
 
-    // オプションを設定（2回目以降は continue を使用）
+    // オプションを設定
     const options: Options = {
       ...DEFAULT_OPTIONS,
       ...(isFirstQuery ? {} : { continue: true }),
+      ...(resumeId && isFirstQuery ? { resume: resumeId } : {}),
     };
 
     const abortController = new AbortController();
@@ -603,8 +930,21 @@ client.once("ready", async () => {
 
       currentThread = thread;
 
-      // 環境情報を投稿
-      await thread.send(formatEnvironmentInfo(envInfo));
+      // 会話履歴を取得
+      let conversationHistory = "";
+      if (shouldContinue || resumeId) {
+        const sessions = await getSessionList();
+        const targetSessionId = resumeId || (sessions.length > 0 ? sessions[0].sessionId : null);
+        
+        if (targetSessionId) {
+          const messages = await getConversationHistory(targetSessionId, 5);
+          conversationHistory = formatConversationHistoryForDiscord(messages);
+        }
+      }
+      
+      // 環境情報と会話履歴を投稿
+      const initialMessage = conversationHistory + formatEnvironmentInfo(envInfo);
+      await thread.send(initialMessage);
 
       console.log(
         formatLogMessage("スレッド作成完了", {
@@ -664,6 +1004,12 @@ client.on("messageCreate", async (message: Message) => {
     // リセットコマンドの処理
     if (message.content === "!reset" || message.content === "!clear") {
       isFirstQuery = true;
+      // リセット時は resume ID もクリア
+      if (resumeId) {
+        console.log(
+          formatLogMessage("情報", { メッセージ: "resume ID がクリアされました" })
+        );
+      }
       currentSessionId = undefined;
       await textChannel.send(formatMessage(MessageType.RESET));
       return;
