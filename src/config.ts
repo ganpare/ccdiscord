@@ -1,10 +1,10 @@
 // Configuration management module
+import { showSetupInstructions, t } from "./i18n.ts";
 
 export interface Config {
   discordToken: string;
   channelId: string;
   userId: string;
-  claudeApiKey?: string;
   debugMode: boolean;
   neverSleep: boolean;
   sessionId?: string;
@@ -13,6 +13,13 @@ export interface Config {
 }
 
 export interface EnvConfig {
+  // Discord
+  DISCORD_BOT_TOKEN?: string;
+  DISCORD_CLIENT_ID?: string;
+  DISCORD_CHANNEL_ID?: string;
+  // Anthropic
+  ANTHROPIC_API_KEY?: string;
+  // Legacy support
   CC_DISCORD_TOKEN?: string;
   CC_DISCORD_CHANNEL_ID?: string;
   CC_DISCORD_USER_ID?: string;
@@ -24,32 +31,39 @@ export interface EnvConfig {
 export function loadConfig(debugMode = false): Config | null {
   const env = Deno.env.toObject() as EnvConfig;
 
-  const discordToken = env.CC_DISCORD_TOKEN;
-  const channelId = env.CC_DISCORD_CHANNEL_ID;
-  const userId = env.CC_DISCORD_USER_ID;
-  const claudeApiKey = env.CC_CLAUDE_API_KEY || env.CC_ANTHROPIC_API_KEY;
+  // Support both new and legacy environment variable names
+  const discordToken = env.DISCORD_BOT_TOKEN || env.CC_DISCORD_TOKEN;
+  const channelId = env.DISCORD_CHANNEL_ID || env.CC_DISCORD_CHANNEL_ID;
+  const clientId = env.DISCORD_CLIENT_ID;
+  const userId = env.CC_DISCORD_USER_ID || clientId;
+  const claudeApiKey = env.ANTHROPIC_API_KEY || env.CC_CLAUDE_API_KEY || env.CC_ANTHROPIC_API_KEY;
 
-  // Validate required fields
-  if (!discordToken || !channelId || !userId) {
-    console.error(
-      "Error: Please set CC_DISCORD_TOKEN, CC_DISCORD_CHANNEL_ID, CC_DISCORD_USER_ID in environment variables"
-    );
+  // Check which variables are missing
+  const missingVars: string[] = [];
+  
+  if (!discordToken) missingVars.push("DISCORD_BOT_TOKEN");
+  if (!clientId && !env.CC_DISCORD_USER_ID) missingVars.push("DISCORD_CLIENT_ID");
+  if (!channelId) missingVars.push("DISCORD_CHANNEL_ID");
+
+  // Show setup instructions if any required variables are missing
+  if (missingVars.length > 0) {
+    showSetupInstructions(missingVars);
     return null;
   }
 
-  // Claude API key is required unless in debug mode
-  // if (!debugMode && !claudeApiKey) {
-  //   console.error(
-  //     "Error: Please set CC_CLAUDE_API_KEY or CC_ANTHROPIC_API_KEY in environment variables"
-  //   );
-  //   return null;
-  // }
+  // Warn if ANTHROPIC_API_KEY is set (Claude Code uses internal auth)
+  if (claudeApiKey && !debugMode) {
+    console.log("\n" + "⚠️ ".repeat(25));
+    console.log(t("config.warnings.apiKeyNotNeeded"));
+    console.log(t("config.warnings.apiKeyBillingRisk"));
+    console.log(t("config.warnings.apiKeyIgnored"));
+    console.log("⚠️ ".repeat(25) + "\n");
+  }
 
   return {
-    discordToken,
-    channelId,
-    userId,
-    claudeApiKey,
+    discordToken: discordToken!,
+    channelId: channelId!,
+    userId: userId!,
     debugMode,
     neverSleep: false, // Set from CLI options
     maxTurns: 300,
@@ -60,10 +74,6 @@ export function loadConfig(debugMode = false): Config | null {
 // Validate configuration
 export function validateConfig(config: Config): boolean {
   if (!config.discordToken || !config.channelId || !config.userId) {
-    return false;
-  }
-
-  if (!config.debugMode && !config.claudeApiKey) {
     return false;
   }
 

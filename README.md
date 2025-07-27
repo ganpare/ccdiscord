@@ -15,59 +15,111 @@ A Discord bot that integrates Claude Code into Discord channels, enabling AI-pow
 
 - [Deno](https://deno.land/) 1.40 or later
 - Discord Bot Token
-- Claude API Key (for production mode)
+- Claude Code CLI installed and authenticated
 
-## Installation
+## How to use
 
-1. Clone the repository:
+### Setup
+
 ```bash
-git clone https://github.com/yourusername/ccdiscord.git
-cd ccdiscord
+CC_DISCORD_TOKEN=your-discord-bot-token
+CC_DISCORD_CHANNEL_ID=your-channel-id
+CC_DISCORD_USER_ID=your-user-id
 ```
 
-2. Install globally (optional):
+### Run
+
 ```bash
-deno install -Afg ccdiscord.ts
+deno run -A jsr:@mizchi/ccdiscord
+```
+
+### CLI Installation
+
+2. Install globally (optional):
+
+```bash
+$ deno install -Afg @mizchi/ccdiscord
+```
+
+3. Clone the repository:
+
+```bash
+git clone https://github.com/mizchi/ccdiscord.git
+cd ccdiscord
 ```
 
 ## Setup
 
+### 0. Create Your Private Discord Server
+
+⚠️ **Important**: First, create your own private Discord server for the bot:
+
+1. Open Discord and click the "+" button in the server list
+2. Select "Create My Own" → "For me and my friends"
+3. Name your server (e.g., "Claude Code Bot")
+4. Right-click on a channel and copy the Channel ID (you'll need this later)
+
 ### 1. Create Discord Bot
 
 1. Go to [Discord Developer Portal](https://discord.com/developers/applications)
-2. Create a new application
-3. Create a bot in the Bot section and obtain the token
-4. Set required permissions:
+2. Click "New Application" and give it a name
+3. Go to the "Bot" section in the left sidebar
+4. Click "Add Bot"
+5. Under "Token", click "Copy" to get your bot token
+6. In the "Privileged Gateway Intents" section, enable:
+   - Message Content Intent
+7. Go to "OAuth2" → "General" in the left sidebar
+8. Copy the "CLIENT ID"
+
+### 2. Invite Bot to Your Server
+
+1. Go to "OAuth2" → "URL Generator" in the left sidebar
+2. Select the following scopes:
+   - `bot`
+3. Select the following bot permissions:
    - Send Messages
    - Create Public Threads
+   - Send Messages in Threads
    - Read Message History
-5. Enable privileged gateway intents in Bot section:
-   - Message Content Intent
+4. Copy the generated URL and open it in your browser
+5. Select your private server and click "Authorize"
 
-### 2. Set Environment Variables
+### 3. Set Environment Variables
+
+Create a `.env` file in the project directory:
 
 ```bash
-# Discord configuration
-export CC_DISCORD_TOKEN="your-discord-bot-token"
-export CC_DISCORD_CHANNEL_ID="your-channel-id"
-export CC_DISCORD_USER_ID="your-user-id"
+# Discord configuration (Required)
+DISCORD_BOT_TOKEN=your_bot_token_here
+DISCORD_CLIENT_ID=your_client_id_here
+DISCORD_CHANNEL_ID=your_channel_id_here  # From your private server
 
-# Claude API (for production mode)
-export ANTHROPIC_API_KEY="your-claude-api-key"
+# Optional
+SESSION_ID=unique_session_id  # For conversation continuity
+DEBUG_MODE=false              # Set to true for testing without API calls
+NEVER_SLEEP=false            # Set to true for auto-task execution
 ```
 
-Or create a `.env` file in the project directory.
+**Note**: The bot also supports legacy environment variable names:
+
+- `CC_DISCORD_TOKEN` → `DISCORD_BOT_TOKEN`
+- `CC_DISCORD_USER_ID` → `DISCORD_CLIENT_ID`
+- `CC_DISCORD_CHANNEL_ID` → `DISCORD_CHANNEL_ID`
+
+**Important**: Claude Code uses internal authentication. Do NOT set `ANTHROPIC_API_KEY` as it may cause unexpected billing charges.
 
 ## Usage
 
 ### Basic Usage
 
 Start the bot:
+
 ```bash
 deno run -A --env ccdiscord.ts
 ```
 
 Or if installed globally:
+
 ```bash
 ccdiscord
 ```
@@ -89,21 +141,25 @@ Options:
 ### Examples
 
 Start in debug mode (no API calls):
+
 ```bash
 ccdiscord --debug
 ```
 
 Continue from last session:
+
 ```bash
 ccdiscord --continue
 ```
 
 Start with Japanese language:
+
 ```bash
 ccdiscord --locale ja
 ```
 
 Enable Never Sleep mode:
+
 ```bash
 ccdiscord --never-sleep
 ```
@@ -160,11 +216,12 @@ ccdiscord/
 
 The bot can be configured through environment variables:
 
-- `CC_DISCORD_TOKEN`: Discord bot token (required)
-- `CC_DISCORD_CHANNEL_ID`: Discord channel ID (required)
-- `CC_DISCORD_USER_ID`: Discord user ID (required)
-- `ANTHROPIC_API_KEY`: Claude API key (required for production mode)
+- `DISCORD_BOT_TOKEN` or `CC_DISCORD_TOKEN`: Discord bot token (required)
+- `DISCORD_CHANNEL_ID` or `CC_DISCORD_CHANNEL_ID`: Discord channel ID (required)
+- `DISCORD_CLIENT_ID` or `CC_DISCORD_USER_ID`: Discord client/user ID (required)
 - `LANG`: System locale for automatic language detection
+
+**Note**: Claude Code uses internal authentication. Do not set `ANTHROPIC_API_KEY`.
 
 ## Security Notice
 

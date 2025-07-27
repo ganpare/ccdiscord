@@ -3,6 +3,44 @@
 export type Locale = "ja" | "en";
 
 interface LocaleMessages {
+  // Setup messages
+  setup: {
+    title: string;
+    missingEnv: string;
+    discordSetup: string;
+    createPrivateServer: string;
+    createBot: string;
+    portal: string;
+    getToken: string;
+    getClientId: string;
+    inviteBot: string;
+    permissions: string;
+    envFile: string;
+    envContent: string;
+    optionalConfig: string;
+    sessionConfig: string;
+    sessionExample: string;
+    debugConfig: string;
+    debugExample: string;
+    neverSleepConfig: string;
+    neverSleepExample: string;
+    runCommand: string;
+    runExample: string;
+    moreInfo: string;
+  };
+  validation: {
+    discordTokenMissing: string;
+    discordClientIdMissing: string;
+    discordChannelIdMissing: string;
+  };
+  config: {
+    warnings: {
+      apiKeyNotNeeded: string;
+      apiKeyBillingRisk: string;
+      apiKeyIgnored: string;
+    };
+  };
+
   // CLI messages
   cli: {
     help: {
@@ -116,6 +154,44 @@ interface LocaleMessages {
 
 const messages: Record<Locale, LocaleMessages> = {
   ja: {
+    setup: {
+      title: "🚀 セットアップガイド",
+      missingEnv: "必要な環境変数が設定されていません",
+      discordSetup: "Discord Bot のセットアップ",
+      createPrivateServer: "0. まず、あなた専用のプライベートDiscordサーバーを作成してください",
+      createBot: "1. Discord Developer Portal でボットを作成:",
+      portal: "   https://discord.com/developers/applications",
+      getToken: "2. Bot タブから TOKEN を取得",
+      getClientId: "3. OAuth2 タブから CLIENT ID を取得", 
+      inviteBot: "4. OAuth2 URL Generator で bot スコープと以下の権限を選択:",
+      permissions: "   - Send Messages\n   - Create Public Threads\n   - Send Messages in Threads\n   - Read Message History",
+      envFile: "5. .env ファイルを作成:",
+      envContent: `   DISCORD_BOT_TOKEN=your_bot_token_here
+   DISCORD_CLIENT_ID=your_client_id_here  
+   DISCORD_CHANNEL_ID=your_channel_id_here  # プライベートサーバーのチャンネルID`,
+      optionalConfig: "オプション設定",
+      sessionConfig: "セッション管理:",
+      sessionExample: "   SESSION_ID=unique_session_id  # 会話の継続用",
+      debugConfig: "デバッグモード:",
+      debugExample: "   DEBUG_MODE=true  # Claude APIを使用しないデバッグモード",
+      neverSleepConfig: "Never Sleep モード:",
+      neverSleepExample: "   NEVER_SLEEP=true  # 自動タスク実行モード",
+      runCommand: "実行方法",
+      runExample: "deno run -A --env src/main.ts",
+      moreInfo: "詳細は README.md を参照してください",
+    },
+    validation: {
+      discordTokenMissing: "DISCORD_BOT_TOKEN が設定されていません",
+      discordClientIdMissing: "DISCORD_CLIENT_ID が設定されていません", 
+      discordChannelIdMissing: "DISCORD_CHANNEL_ID が設定されていません",
+    },
+    config: {
+      warnings: {
+        apiKeyNotNeeded: "警告: ANTHROPIC_API_KEY が設定されていますが、Claude Code は内部認証を使用するため不要です。",
+        apiKeyBillingRisk: "この API キーを設定すると予期しない課金が発生する可能性があります。",
+        apiKeyIgnored: "設定された API キーは無視されます。環境変数から削除することを推奨します。",
+      },
+    },
     cli: {
       help: {
         title: "CC Discord Bot - Claude Code Discord 統合",
@@ -224,6 +300,44 @@ const messages: Record<Locale, LocaleMessages> = {
     },
   },
   en: {
+    setup: {
+      title: "🚀 Setup Guide",
+      missingEnv: "Required environment variables are not set",
+      discordSetup: "Discord Bot Setup",
+      createPrivateServer: "0. First, create your own private Discord server",
+      createBot: "1. Create a bot on Discord Developer Portal:",
+      portal: "   https://discord.com/developers/applications",
+      getToken: "2. Get TOKEN from Bot tab",
+      getClientId: "3. Get CLIENT ID from OAuth2 tab",
+      inviteBot: "4. Select bot scope and following permissions in OAuth2 URL Generator:",
+      permissions: "   - Send Messages\n   - Create Public Threads\n   - Send Messages in Threads\n   - Read Message History",
+      envFile: "5. Create .env file:",
+      envContent: `   DISCORD_BOT_TOKEN=your_bot_token_here
+   DISCORD_CLIENT_ID=your_client_id_here
+   DISCORD_CHANNEL_ID=your_channel_id_here  # Your private server's channel ID`,
+      optionalConfig: "Optional Configuration",
+      sessionConfig: "Session Management:",
+      sessionExample: "   SESSION_ID=unique_session_id  # For conversation continuity",
+      debugConfig: "Debug Mode:",
+      debugExample: "   DEBUG_MODE=true  # Debug mode without Claude API",
+      neverSleepConfig: "Never Sleep Mode:",
+      neverSleepExample: "   NEVER_SLEEP=true  # Automatic task execution mode",
+      runCommand: "How to Run",
+      runExample: "deno run -A --env src/main.ts",
+      moreInfo: "See README.md for more details",
+    },
+    validation: {
+      discordTokenMissing: "DISCORD_BOT_TOKEN is not set",
+      discordClientIdMissing: "DISCORD_CLIENT_ID is not set",
+      discordChannelIdMissing: "DISCORD_CHANNEL_ID is not set",
+    },
+    config: {
+      warnings: {
+        apiKeyNotNeeded: "Warning: ANTHROPIC_API_KEY is set but not needed. Claude Code uses internal authentication.",
+        apiKeyBillingRisk: "Setting this API key may cause unexpected billing charges.",
+        apiKeyIgnored: "The API key will be ignored. We recommend removing it from environment variables.",
+      },
+    },
     cli: {
       help: {
         title: "CC Discord Bot - Claude Code Discord Integration",
@@ -384,4 +498,50 @@ export const i18n = new I18n();
 // Helper function for template literals
 export function t(key: string): string {
   return i18n.t(key);
+}
+
+// Show setup instructions
+export function showSetupInstructions(missingVars: string[]) {
+  console.log(`\n${t("setup.title")}\n`);
+  console.log(`${t("setup.missingEnv")}:\n`);
+  
+  missingVars.forEach(varName => {
+    console.log(`  ❌ ${varName}`);
+  });
+  
+  console.log("\n" + "=".repeat(50) + "\n");
+  
+  // Discord setup if needed
+  if (missingVars.some(v => v.startsWith("DISCORD_"))) {
+    console.log(`${t("setup.discordSetup")}\n`);
+    console.log(`⚠️  ${t("setup.createPrivateServer")}\n`);
+    console.log(t("setup.createBot"));
+    console.log(t("setup.portal"));
+    console.log(t("setup.getToken"));
+    console.log(t("setup.getClientId"));
+    console.log(t("setup.inviteBot"));
+    console.log(t("setup.permissions"));
+    console.log(t("setup.envFile"));
+    console.log(t("setup.envContent"));
+    console.log();
+  }
+  
+  // Optional configuration
+  console.log(`${t("setup.optionalConfig")}\n`);
+  console.log(t("setup.sessionConfig"));
+  console.log(t("setup.sessionExample"));
+  console.log();
+  console.log(t("setup.debugConfig"));
+  console.log(t("setup.debugExample"));
+  console.log();
+  console.log(t("setup.neverSleepConfig"));
+  console.log(t("setup.neverSleepExample"));
+  console.log();
+  
+  // Run command
+  console.log(`${t("setup.runCommand")}\n`);
+  console.log(t("setup.runExample"));
+  console.log();
+  console.log(t("setup.moreInfo"));
+  console.log("=".repeat(50) + "\n");
 }

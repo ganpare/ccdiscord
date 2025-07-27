@@ -19,10 +19,7 @@ export class ClaudeCodeAdapter implements Adapter {
       this.currentSessionId = config.sessionId;
     }
 
-    // Set Claude API key to environment variable
-    if (config.claudeApiKey) {
-      Deno.env.set("ANTHROPIC_API_KEY", config.claudeApiKey);
-    }
+    // Claude Code uses internal authentication, no API key needed
   }
 
   async start(): Promise<void> {
@@ -142,7 +139,7 @@ export class ClaudeCodeAdapter implements Adapter {
 
   // Adapter state
   isReady(): boolean {
-    return !!this.config.claudeApiKey;
+    return true; // Claude Code uses internal authentication
   }
 
   hasActiveSession(): boolean {

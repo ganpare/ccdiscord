@@ -15,7 +15,7 @@ Discord チャンネルに Claude Code を統合し、AI による支援と自�
 
 - [Deno](https://deno.land/) 1.40 以降
 - Discord ボットトークン
-- Claude API キー（本番モード用）
+- Claude Code CLI がインストールされ認証済みであること
 
 ## インストール
 
@@ -34,28 +34,62 @@ deno install -Afg ccdiscord.ts
 
 ## セットアップ
 
+### 0. プライベート Discord サーバーの作成
+
+⚠️ **重要**: まず、ボット専用のプライベート Discord サーバーを作成してください：
+
+1. Discord を開き、サーバーリストの「+」ボタンをクリック
+2. 「オリジナルの作成」→「自分と友達のため」を選択
+3. サーバーに名前を付ける（例：「Claude Code Bot」）
+4. チャンネルを右クリックして「チャンネル ID をコピー」（後で必要になります）
+
 ### 1. Discord ボットの作成
 
 1. [Discord Developer Portal](https://discord.com/developers/applications) にアクセス
-2. 新しいアプリケーションを作成
-3. Bot セクションでボットを作成し、トークンを取得
-4. 必要な権限を設定:
-   - メッセージの送信
-   - 公開スレッドの作成
-   - メッセージ履歴の読み取り
-5. Bot セクションで特権ゲートウェイインテントを有効化:
-   - メッセージコンテンツインテント
+2. 「New Application」をクリックして名前を付ける
+3. 左サイドバーの「Bot」セクションに移動
+4. 「Add Bot」をクリック
+5. 「Token」の下にある「Copy」をクリックしてボットトークンを取得
+6. 「Privileged Gateway Intents」セクションで有効化:
+   - Message Content Intent
+7. 左サイドバーの「OAuth2」→「General」に移動
+8. 「CLIENT ID」をコピー
 
-### 2. 環境変数の設定
+### 2. ボットをサーバーに招待
+
+1. 左サイドバーの「OAuth2」→「URL Generator」に移動
+2. 以下のスコープを選択:
+   - `bot`
+3. 以下のボット権限を選択:
+   - Send Messages（メッセージの送信）
+   - Create Public Threads（公開スレッドの作成）
+   - Send Messages in Threads（スレッドでメッセージを送信）
+   - Read Message History（メッセージ履歴の読み取り）
+4. 生成された URL をコピーしてブラウザで開く
+5. あなたのプライベートサーバーを選択し「認証」をクリック
+
+### 3. 環境変数の設定
+
+プロジェクトディレクトリに `.env` ファイルを作成:
 
 ```bash
-# Discord 設定
-export CC_DISCORD_TOKEN="your-discord-bot-token"
-export CC_DISCORD_CHANNEL_ID="your-channel-id"
-export CC_DISCORD_USER_ID="your-user-id"
+# Discord 設定（必須）
+DISCORD_BOT_TOKEN=your_bot_token_here
+DISCORD_CLIENT_ID=your_client_id_here
+DISCORD_CHANNEL_ID=your_channel_id_here  # プライベートサーバーのチャンネルID
+
+# オプション
+SESSION_ID=unique_session_id  # 会話の継続用
+DEBUG_MODE=false              # true でAPI呼び出しなしのテスト
+NEVER_SLEEP=false            # true で自動タスク実行
 ```
 
-またはプロジェクトディレクトリに `.env` ファイルを作成してください。
+**注意**: レガシー環境変数名もサポートしています：
+- `CC_DISCORD_TOKEN` → `DISCORD_BOT_TOKEN`
+- `CC_DISCORD_USER_ID` → `DISCORD_CLIENT_ID`
+- `CC_DISCORD_CHANNEL_ID` → `DISCORD_CHANNEL_ID`
+
+**重要**: Claude Code は内部認証を使用します。`ANTHROPIC_API_KEY` を設定しないでください。予期しない課金が発生する可能性があります。
 
 ## 使用方法
 
@@ -165,11 +199,12 @@ ccdiscord/
 
 ボットは環境変数を通じて設定できます:
 
-- `CC_DISCORD_TOKEN`: Discord ボットトークン（必須）
-- `CC_DISCORD_CHANNEL_ID`: Discord チャンネル ID（必須）
-- `CC_DISCORD_USER_ID`: Discord ユーザー ID（必須）
-- `ANTHROPIC_API_KEY`: Claude API キー（本番モード時必須）
+- `DISCORD_BOT_TOKEN` または `CC_DISCORD_TOKEN`: Discord ボットトークン（必須）
+- `DISCORD_CHANNEL_ID` または `CC_DISCORD_CHANNEL_ID`: Discord チャンネル ID（必須）
+- `DISCORD_CLIENT_ID` または `CC_DISCORD_USER_ID`: Discord クライアント/ユーザー ID（必須）
 - `LANG`: 自動言語検出用のシステムロケール
+
+**注意**: Claude Code は内部認証を使用します。`ANTHROPIC_API_KEY` を設定しないでください。
 
 ## セキュリティ注意事項
 
