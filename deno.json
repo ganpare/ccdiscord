@@ -1,10 +1,13 @@
 {
   "tasks": {
-    "start": "deno run -A --env ccdiscord.ts",
-    "dev": "deno run --watch -A --env ccdiscord.ts",
-    "check": "deno check ccdiscord.ts",
+    "start": "deno run -A --env src/main.ts",
+    "dev": "deno run --watch -A --env src/main.ts",
+    "check": "deno check src/main.ts",
     "fmt": "deno fmt",
-    "lint": "deno lint"
+    "lint": "deno lint",
+    "test": "deno test src/tests/",
+    "start:debug": "deno run -A --env src/main.ts --debug",
+    "start:old": "deno run -A --env ccdiscord.ts"
   },
   "compilerOptions": {
     "lib": ["deno.window"]
