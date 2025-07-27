@@ -20,12 +20,14 @@ Discord チャンネルに Claude Code を統合し、AI による支援と自�
 ## インストール
 
 1. リポジトリをクローン:
+
 ```bash
 git clone https://github.com/yourusername/ccdiscord.git
 cd ccdiscord
 ```
 
 2. グローバルインストール（オプション）:
+
 ```bash
 deno install -Afg ccdiscord.ts
 ```
@@ -51,9 +53,6 @@ deno install -Afg ccdiscord.ts
 export CC_DISCORD_TOKEN="your-discord-bot-token"
 export CC_DISCORD_CHANNEL_ID="your-channel-id"
 export CC_DISCORD_USER_ID="your-user-id"
-
-# Claude API（本番モード用）
-export ANTHROPIC_API_KEY="your-claude-api-key"
 ```
 
 またはプロジェクトディレクトリに `.env` ファイルを作成してください。
@@ -63,11 +62,13 @@ export ANTHROPIC_API_KEY="your-claude-api-key"
 ### 基本的な使用方法
 
 ボットを起動:
+
 ```bash
 deno run -A --env ccdiscord.ts
 ```
 
 グローバルインストール済みの場合:
+
 ```bash
 ccdiscord
 ```
@@ -88,22 +89,26 @@ ccdiscord
 
 ### 使用例
 
-デバッグモードで起動（API呼び出しなし）:
+デバッグモードで起動（API 呼び出しなし）:
+
 ```bash
 ccdiscord --debug
 ```
 
 最後のセッションから続行:
+
 ```bash
 ccdiscord --continue
 ```
 
 日本語で起動:
+
 ```bash
 ccdiscord --locale ja
 ```
 
 Never Sleep モードを有効化:
+
 ```bash
 ccdiscord --never-sleep
 ```
