@@ -1,4 +1,7 @@
 {
+  "name": "@mizchi/ccdiscord",
+  "version": "0.0.1",
+  "license": "MIT",
   "tasks": {
     "start": "deno run -A --env src/main.ts",
     "dev": "deno run --watch -A --env src/main.ts",
@@ -11,6 +14,9 @@
   },
   "compilerOptions": {
     "lib": ["deno.window"]
+  },
+  "exports": {
+    ".": "./ccdiscord.ts"
   },
   "fmt": {
     "options": {
