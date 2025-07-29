@@ -1,4 +1,5 @@
 {
   "deno.enable": true,
-  "eslint.enable": false
+  "eslint.enable": false,
+  "kiroAgent.configureMCP": "Disabled"
 }
